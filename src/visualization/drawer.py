@@ -107,6 +107,7 @@ def render_scene_graph(
     fps: float | None = None,
     paused: bool = False,
     provider: str = "CPU",
+    show_graph: bool = True,
 ) -> np.ndarray:
     """Draw boxes, relations, and HUD overlay on the live frame."""
     canvas = frame.copy()
@@ -117,18 +118,21 @@ def render_scene_graph(
         center = draw_bounding_box(canvas, obj.bbox, label, class_color(obj.class_id))
         centers.append(center)
 
-    for rel in result.relations:
-        if rel.subject_index >= len(centers) or rel.object_index >= len(centers):
-            continue
-        draw_relation(
-            canvas,
-            centers[rel.subject_index],
-            centers[rel.object_index],
-            rel.predicate,
-            rel.triplet_score,
-        )
+    if show_graph:
+        for rel in result.relations:
+            if rel.subject_index >= len(centers) or rel.object_index >= len(centers):
+                continue
+            draw_relation(
+                canvas,
+                centers[rel.subject_index],
+                centers[rel.object_index],
+                rel.predicate,
+                rel.triplet_score,
+            )
 
-    _draw_hud(canvas, result, fps, paused, provider)
+    _draw_hud(canvas, result, fps, paused, provider, show_graph=show_graph)
+    if show_graph:
+        _draw_primary_relation(canvas, result)
     return canvas
 
 
@@ -176,12 +180,45 @@ def render_info_panel(
     return panel
 
 
+def _draw_primary_relation(image: np.ndarray, result: SceneGraphResult) -> None:
+    """Draw the first relation triplet centered at the bottom of the frame."""
+    for rel in result.relations:
+        if rel.subject_index >= len(result.objects) or rel.object_index >= len(result.objects):
+            continue
+
+        subject = result.objects[rel.subject_index].class_name
+        obj = result.objects[rel.object_index].class_name
+        text = f"{subject} - {rel.predicate} - {obj} ({rel.triplet_score:.2f})"
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = max(0.55, (0.35 * image.shape[1]) / 500)
+        thickness = max(1, int(round(scale)))
+        (text_w, text_h), baseline = cv2.getTextSize(text, font, scale, thickness)
+
+        img_h, img_w = image.shape[:2]
+        x = (img_w - text_w) // 2
+        y = img_h - 16
+        pad_x, pad_y = 10, 8
+
+        cv2.rectangle(
+            image,
+            (x - pad_x, y - text_h - pad_y),
+            (x + text_w + pad_x, y + baseline + pad_y),
+            (20, 20, 20),
+            -1,
+        )
+        cv2.putText(image, text, (x, y), font, scale, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+        cv2.putText(image, text, (x, y), font, scale, (255, 200, 120), thickness, cv2.LINE_AA)
+        break
+
+
 def _draw_hud(
     image: np.ndarray,
     result: SceneGraphResult,
     fps: float | None,
     paused: bool,
     provider: str,
+    show_graph: bool = True,
 ) -> None:
     font = cv2.FONT_HERSHEY_SIMPLEX
     scale = max(0.45, (0.3 * image.shape[1]) / 500)
@@ -194,8 +231,10 @@ def _draw_hud(
         lines.insert(0, f"FPS: {fps:.1f}")
     if paused:
         lines.append("PAUSED")
+    if not show_graph:
+        lines.append("GRAPH OFF")
 
-    lines.extend(["q/ESC quit | s save | p pause | r rotate | 0 reset | c camera"])
+    lines.extend(["q/ESC quit | s save | p pause | g graph | r rotate | 0 reset | c camera"])
 
     for i, text in enumerate(lines):
         pos = (12, 24 + i * int(28 * scale))

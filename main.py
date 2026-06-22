@@ -51,6 +51,7 @@ class AppState:
         self.rel_conf = rel_conf
         self.max_relations = max_relations
         self.paused = False
+        self.show_graph = True
         self.rotation_deg = 0
         self.last_result: SceneGraphResult | None = None
 
@@ -159,7 +160,7 @@ def run(
         cv2.namedWindow(WINDOW_INFO, cv2.WINDOW_NORMAL)
 
     logger.info(
-        "Running on camera %s. Controls: q/ESC quit, s save JSON, p pause, r rotate, 0 reset, c camera, a auto-screenshots.",
+        "Running on camera %s. Controls: q/ESC quit, s save JSON, p pause, g graph, r rotate, 0 reset, c camera, a auto-screenshots.",
         current_camera,
     )
     if auto_screenshots:
@@ -206,7 +207,14 @@ def run(
                 break
 
             result = state.last_result or empty_result
-            vis = render_scene_graph(frame, result, fps=fps, paused=state.paused, provider=provider)
+            vis = render_scene_graph(
+                frame,
+                result,
+                fps=fps,
+                paused=state.paused,
+                provider=provider,
+                show_graph=state.show_graph,
+            )
             screenshot_saver.maybe_save(vis, result)
             vis_h, vis_w = vis.shape[:2]
             main_window_size = _sync_window_size(WINDOW_MAIN, vis_w, vis_h, main_window_size)
@@ -223,6 +231,9 @@ def run(
                 break
             if key == ord("p"):
                 state.paused = not state.paused
+            elif key == ord("g"):
+                state.show_graph = not state.show_graph
+                logger.info("Scene graph overlay %s", "enabled" if state.show_graph else "disabled")
             elif key == ord("r"):
                 state.rotation_deg = (state.rotation_deg + 90) % 360
                 if raw_frame is not None:
