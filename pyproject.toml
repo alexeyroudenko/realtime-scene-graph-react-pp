@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "realtime-scene-graph-opencv"
+version = "1.0.0"
+description = "Real-time scene graph generation from webcam using pure OpenCV and REACT++ ONNX"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Scene Graph Team" }]
+dependencies = [
+    "opencv-python>=4.8.0",
+    "onnxruntime-gpu>=1.17.0",
+    "huggingface-hub>=0.20.0",
+    "numpy>=1.24.0",
+    "networkx>=3.1",
+]
+
+[project.scripts]
+scene-graph = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

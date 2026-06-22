@@ -1,0 +1,43 @@
+"""Application configuration."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+MODELS_DIR = PROJECT_ROOT / "models"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+SCREENSHOTS_DIR = OUTPUT_DIR / "screenshots"
+
+DEFAULT_SCREENSHOT_INTERVAL_SEC = 5.0
+
+HF_REPO_ID = "maelic/REACTPlusPlus_PSG"
+HF_MODEL_FILENAME = "yolo12m/react_pp_yolo12m.onnx"
+LOCAL_MODEL_NAME = "react_pp_yolo12m.onnx"
+
+WINDOW_MAIN = "Scene Graph - Live"
+WINDOW_CONTROLS = "Controls"
+WINDOW_INFO = "Scene Graph Info"
+
+INFO_PANEL_WIDTH = 420
+INFO_PANEL_MIN_HEIGHT = 240
+INFO_PANEL_LINE_HEIGHT = 22
+INFO_PANEL_MAX_LINES = 30
+
+CONTROLS_WINDOW_WIDTH = INFO_PANEL_WIDTH
+CONTROLS_TRACKBAR_COUNT = 3
+CONTROLS_TRACKBAR_HEIGHT = 40
+CONTROLS_WINDOW_HEIGHT = 30 + CONTROLS_TRACKBAR_COUNT * CONTROLS_TRACKBAR_HEIGHT
+
+DEFAULT_BOX_CONF = 0.40
+DEFAULT_REL_CONF = 0.05
+DEFAULT_MAX_RELATIONS = 20
+
+INPUT_SIZE = 640
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 720
+
+TRACKBAR_BOX_CONF = "Box Confidence"
+TRACKBAR_REL_CONF = "Relation Confidence"
+TRACKBAR_MAX_REL = "Max Relations"
