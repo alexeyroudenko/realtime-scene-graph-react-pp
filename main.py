@@ -51,6 +51,7 @@ class AppState:
         self.rel_conf = rel_conf
         self.max_relations = max_relations
         self.paused = False
+        self.rotation_deg = 0
         self.last_result: SceneGraphResult | None = None
 
     def reset_defaults(self) -> tuple[int, int, int]:
@@ -76,6 +77,17 @@ class AppState:
 
 def _noop_trackbar(_value: int) -> None:
     pass
+
+
+def rotate_frame(frame: np.ndarray, degrees: int) -> np.ndarray:
+    """Rotate a camera frame by 0, 90, 180, or 270 degrees."""
+    if degrees == 90:
+        return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    if degrees == 180:
+        return cv2.rotate(frame, cv2.ROTATE_180)
+    if degrees == 270:
+        return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
 
 
 def _sync_window_size(
@@ -147,7 +159,7 @@ def run(
         cv2.namedWindow(WINDOW_INFO, cv2.WINDOW_NORMAL)
 
     logger.info(
-        "Running on camera %s. Controls: q/ESC quit, s save JSON, p pause, r reset, c camera, a auto-screenshots.",
+        "Running on camera %s. Controls: q/ESC quit, s save JSON, p pause, r rotate, 0 reset, c camera, a auto-screenshots.",
         current_camera,
     )
     if auto_screenshots:
@@ -167,6 +179,7 @@ def run(
     fps = 0.0
     fps_alpha = 0.9
     empty_result = SceneGraphResult()
+    raw_frame: np.ndarray | None = None
     frame: np.ndarray | None = None
     main_window_size: tuple[int, int] | None = None
     info_panel_size: tuple[int, int] | None = None
@@ -174,10 +187,12 @@ def run(
     try:
         while True:
             if not state.paused:
-                ret, frame = cap.read()
-                if not ret or frame is None:
+                ret, raw_frame = cap.read()
+                if not ret or raw_frame is None:
                     logger.warning("Failed to read frame from camera %s", current_camera)
                     break
+
+                frame = rotate_frame(raw_frame, state.rotation_deg)
 
                 read_trackbars(state)
                 state.apply_to_engine(engine)
@@ -187,7 +202,7 @@ def run(
                 elapsed = time.perf_counter() - loop_start
                 instant_fps = 1.0 / elapsed if elapsed > 0 else 0.0
                 fps = fps_alpha * fps + (1.0 - fps_alpha) * instant_fps
-            elif frame is None:
+            elif raw_frame is None:
                 break
 
             result = state.last_result or empty_result
@@ -209,6 +224,15 @@ def run(
             if key == ord("p"):
                 state.paused = not state.paused
             elif key == ord("r"):
+                state.rotation_deg = (state.rotation_deg + 90) % 360
+                if raw_frame is not None:
+                    frame = rotate_frame(raw_frame, state.rotation_deg)
+                    read_trackbars(state)
+                    state.apply_to_engine(engine)
+                    state.last_result = engine.predict(frame)
+                main_window_size = None
+                logger.info("Camera rotation: %d°", state.rotation_deg)
+            elif key == ord("0"):
                 state.reset_defaults()
                 set_trackbars(state)
                 state.apply_to_engine(engine)

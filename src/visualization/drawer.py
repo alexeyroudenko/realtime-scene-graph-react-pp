@@ -195,7 +195,7 @@ def _draw_hud(
     if paused:
         lines.append("PAUSED")
 
-    lines.extend(["q/ESC quit | s save | p pause | r reset | c camera"])
+    lines.extend(["q/ESC quit | s save | p pause | r rotate | 0 reset | c camera"])
 
     for i, text in enumerate(lines):
         pos = (12, 24 + i * int(28 * scale))

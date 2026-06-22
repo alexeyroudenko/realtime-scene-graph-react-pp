@@ -58,7 +58,8 @@ On first launch, the REACT++ model (~50 MB) is downloaded into `models/`.
 | `q` / `ESC` | Quit |
 | `s` | Save current scene graph to `output/scene_graph_*.json` |
 | `p` | Pause / resume |
-| `r` | Reset trackbars to defaults |
+| `r` | Rotate camera image 90° (0° → 90° → 180° → 270° → 0°) |
+| `0` | Reset trackbars to defaults |
 | `c` | Switch camera (when multiple devices exist) |
 
 ## JSON Export Format
