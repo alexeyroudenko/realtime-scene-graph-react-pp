@@ -4,11 +4,40 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 from pathlib import Path
+
+
+def _configure_nvidia_dll_paths() -> None:
+    """Expose pip-installed CUDA/cuDNN DLLs without a system CUDA toolkit."""
+    if sys.platform == "win32":
+        nvidia_root = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+        if not nvidia_root.is_dir():
+            return
+
+        bins: list[str] = []
+        for sub in sorted(nvidia_root.iterdir()):
+            if not sub.is_dir() or sub.name.startswith("_"):
+                continue
+            bin_dir = sub / "bin"
+            if bin_dir.is_dir():
+                path_str = str(bin_dir)
+                bins.append(path_str)
+                os.add_dll_directory(path_str)
+
+        if bins:
+            os.environ["PATH"] = os.pathsep.join(bins) + os.pathsep + os.environ.get("PATH", "")
+
+
+_configure_nvidia_dll_paths()
 
 import numpy as np
 import onnxruntime as ort
 from huggingface_hub import hf_hub_download
+
+if hasattr(ort, "preload_dlls"):
+    ort.preload_dlls()
 
 from src.config import (
     HF_MODEL_FILENAME,
