@@ -9,6 +9,9 @@ Lightweight desktop app for **real-time Scene Graph Generation** from a webcam u
 - Live bounding boxes, relation arrows, and predicate labels
 - OpenCV trackbars for **Box Confidence**, **Relation Confidence**, and **Max Relations**
 - Secondary info panel with object/relation lists
+- Mini graph window with nodes and directed relation edges
+- Load a video file instead of the webcam (`o`)
+- Toggle HUD overlay (`h`), scene graph overlay (`g`), and camera/video image (`i`)
 - `networkx` directed graph internally; export current frame as JSON
 
 ## Requirements
@@ -59,9 +62,12 @@ On first launch, the REACT++ model (~50 MB) is downloaded into `models/`.
 | `s` | Save current scene graph to `output/scene_graph_*.json` |
 | `p` | Pause / resume |
 | `g` | Toggle scene graph overlay (relations and labels); boxes only when off |
+| `h` | Toggle HUD (FPS, stats, hotkeys) |
+| `i` | Toggle camera/video image; when off, only boxes and graph overlay are drawn |
+| `o` | Open file dialog and play a video file instead of the webcam (loops at EOF) |
 | `r` | Rotate camera image 90° (0° → 90° → 180° → 270° → 0°) |
 | `0` | Reset trackbars to defaults |
-| `c` | Switch camera (when multiple devices exist) |
+| `c` | Switch camera; from video mode, returns to the first webcam |
 
 ## JSON Export Format
 

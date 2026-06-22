@@ -20,6 +20,8 @@ from src.config import (
     DEFAULT_MAX_RELATIONS,
     DEFAULT_REL_CONF,
     DEFAULT_SCREENSHOT_INTERVAL_SEC,
+    MINI_GRAPH_HEIGHT,
+    MINI_GRAPH_WIDTH,
     OUTPUT_DIR,
     PROJECT_ROOT,
     SCREENSHOTS_DIR,
@@ -29,11 +31,20 @@ from src.config import (
     WINDOW_CONTROLS,
     WINDOW_INFO,
     WINDOW_MAIN,
+    WINDOW_MINI_GRAPH,
 )
 from src.inference.scene_graph import SceneGraphEngine, SceneGraphResult
-from src.utils.helpers import discover_cameras, next_json_output_path, open_camera, setup_logging
+from src.utils.helpers import (
+    discover_cameras,
+    next_json_output_path,
+    open_camera,
+    open_video,
+    pick_video_file,
+    read_frame,
+    setup_logging,
+)
 from src.utils.screenshot_saver import ScreenshotSaver
-from src.visualization.drawer import render_info_panel, render_scene_graph
+from src.visualization.drawer import render_info_panel, render_mini_graph, render_scene_graph
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +63,12 @@ class AppState:
         self.max_relations = max_relations
         self.paused = False
         self.show_graph = True
+        self.show_hud = True
+        self.show_image = True
         self.rotation_deg = 0
         self.last_result: SceneGraphResult | None = None
+        self.video_mode = False
+        self.source_label = "camera"
 
     def reset_defaults(self) -> tuple[int, int, int]:
         self.box_conf = DEFAULT_BOX_CONF
@@ -126,6 +141,46 @@ def set_trackbars(state: AppState) -> None:
     cv2.setTrackbarPos(TRACKBAR_MAX_REL, WINDOW_CONTROLS, max_val)
 
 
+def switch_to_camera(
+    state: AppState,
+    cap: cv2.VideoCapture,
+    cameras: list[int],
+    camera_index: int,
+) -> tuple[cv2.VideoCapture, int]:
+    """Release the current capture and open a webcam."""
+    cap.release()
+    camera = camera_index if camera_index in cameras else cameras[0]
+    new_cap = open_camera(camera, CAMERA_WIDTH, CAMERA_HEIGHT)
+    if not new_cap.isOpened():
+        logger.error("Failed to open camera %s", camera)
+        new_cap = open_camera(cameras[0], CAMERA_WIDTH, CAMERA_HEIGHT)
+        camera = cameras[0]
+
+    state.video_mode = False
+    state.source_label = f"camera {camera}"
+    logger.info("Switched to camera %s", camera)
+    return new_cap, camera
+
+
+def switch_to_video(state: AppState, cap: cv2.VideoCapture) -> cv2.VideoCapture:
+    """Open a file dialog and replace the current capture with a video file."""
+    path = pick_video_file()
+    if path is None:
+        logger.info("Video file selection cancelled.")
+        return cap
+
+    new_cap = open_video(path)
+    if not new_cap.isOpened():
+        logger.error("Failed to open video file: %s", path)
+        return cap
+
+    cap.release()
+    state.video_mode = True
+    state.source_label = path.name
+    logger.info("Playing video file: %s", path)
+    return new_cap
+
+
 def run(
     camera_index: int = 0,
     model_path: Path | None = None,
@@ -156,11 +211,15 @@ def run(
 
     cv2.namedWindow(WINDOW_MAIN, cv2.WINDOW_NORMAL)
     create_control_window(state)
+    cv2.namedWindow(WINDOW_MINI_GRAPH, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(WINDOW_MINI_GRAPH, MINI_GRAPH_WIDTH, MINI_GRAPH_HEIGHT)
     if show_info_panel:
         cv2.namedWindow(WINDOW_INFO, cv2.WINDOW_NORMAL)
 
+    state.source_label = f"camera {current_camera}"
     logger.info(
-        "Running on camera %s. Controls: q/ESC quit, s save JSON, p pause, g graph, r rotate, 0 reset, c camera, a auto-screenshots.",
+        "Running on camera %s. Controls: q/ESC quit, s save JSON, p pause, g graph, h hud, "
+        "o video file, r rotate, 0 reset, c camera, i image, a auto-screenshots.",
         current_camera,
     )
     if auto_screenshots:
@@ -184,13 +243,17 @@ def run(
     frame: np.ndarray | None = None
     main_window_size: tuple[int, int] | None = None
     info_panel_size: tuple[int, int] | None = None
+    mini_graph_size: tuple[int, int] | None = None
 
     try:
         while True:
             if not state.paused:
-                ret, raw_frame = cap.read()
+                ret, raw_frame = read_frame(cap, loop_video=state.video_mode)
                 if not ret or raw_frame is None:
-                    logger.warning("Failed to read frame from camera %s", current_camera)
+                    if state.video_mode:
+                        logger.warning("Failed to read frame from video file.")
+                    else:
+                        logger.warning("Failed to read frame from camera %s", current_camera)
                     break
 
                 frame = rotate_frame(raw_frame, state.rotation_deg)
@@ -214,11 +277,23 @@ def run(
                 paused=state.paused,
                 provider=provider,
                 show_graph=state.show_graph,
+                show_hud=state.show_hud,
+                show_image=state.show_image,
+                source_label=state.source_label,
             )
             screenshot_saver.maybe_save(vis, result)
             vis_h, vis_w = vis.shape[:2]
             main_window_size = _sync_window_size(WINDOW_MAIN, vis_w, vis_h, main_window_size)
             cv2.imshow(WINDOW_MAIN, vis)
+
+            mini_graph = render_mini_graph(result)
+            mini_graph_size = _sync_window_size(
+                WINDOW_MINI_GRAPH,
+                mini_graph.shape[1],
+                mini_graph.shape[0],
+                mini_graph_size,
+            )
+            cv2.imshow(WINDOW_MINI_GRAPH, mini_graph)
 
             if show_info_panel:
                 panel = render_info_panel(result)
@@ -234,6 +309,17 @@ def run(
             elif key == ord("g"):
                 state.show_graph = not state.show_graph
                 logger.info("Scene graph overlay %s", "enabled" if state.show_graph else "disabled")
+            elif key == ord("h"):
+                state.show_hud = not state.show_hud
+                logger.info("HUD %s", "enabled" if state.show_hud else "disabled")
+            elif key == ord("i"):
+                state.show_image = not state.show_image
+                logger.info("Camera/video image %s", "enabled" if state.show_image else "disabled")
+            elif key == ord("o"):
+                cap = switch_to_video(state, cap)
+                if not cap.isOpened():
+                    break
+                main_window_size = None
             elif key == ord("r"):
                 state.rotation_deg = (state.rotation_deg + 90) % 360
                 if raw_frame is not None:
@@ -253,13 +339,16 @@ def run(
                     state.last_result.save_json(out_path)
                     logger.info("Saved scene graph to %s", out_path)
             elif key == ord("c"):
-                if len(cameras) > 1:
-                    pos = cameras.index(current_camera)
-                    current_camera = cameras[(pos + 1) % len(cameras)]
-                    cap.release()
-                    cap = open_camera(current_camera, CAMERA_WIDTH, CAMERA_HEIGHT)
+                if state.video_mode or len(cameras) > 1:
+                    if state.video_mode:
+                        current_camera = cameras[0]
+                    else:
+                        pos = cameras.index(current_camera)
+                        current_camera = cameras[(pos + 1) % len(cameras)]
+                    cap, current_camera = switch_to_camera(state, cap, cameras, current_camera)
+                    if not cap.isOpened():
+                        break
                     main_window_size = None
-                    logger.info("Switched to camera %s", current_camera)
                 else:
                     logger.info("Only one camera available.")
             elif key == ord("a"):

@@ -12,6 +12,9 @@ from src.config import (
     INFO_PANEL_MAX_LINES,
     INFO_PANEL_MIN_HEIGHT,
     INFO_PANEL_WIDTH,
+    MINI_GRAPH_HEIGHT,
+    MINI_GRAPH_NODE_RADIUS,
+    MINI_GRAPH_WIDTH,
 )
 from src.inference.scene_graph import SceneGraphResult
 
@@ -108,9 +111,15 @@ def render_scene_graph(
     paused: bool = False,
     provider: str = "CPU",
     show_graph: bool = True,
+    show_hud: bool = True,
+    show_image: bool = True,
+    source_label: str = "camera",
 ) -> np.ndarray:
-    """Draw boxes, relations, and HUD overlay on the live frame."""
-    canvas = frame.copy()
+    """Draw boxes, relations, and optional HUD overlay on the live frame."""
+    if show_image:
+        canvas = frame.copy()
+    else:
+        canvas = np.zeros_like(frame)
     centers: list[tuple[int, int]] = []
 
     for obj in result.objects:
@@ -130,7 +139,17 @@ def render_scene_graph(
                 rel.triplet_score,
             )
 
-    _draw_hud(canvas, result, fps, paused, provider, show_graph=show_graph)
+    if show_hud:
+        _draw_hud(
+            canvas,
+            result,
+            fps,
+            paused,
+            provider,
+            show_graph=show_graph,
+            show_image=show_image,
+            source_label=source_label,
+        )
     if show_graph:
         _draw_primary_relation(canvas, result)
     return canvas
@@ -180,6 +199,87 @@ def render_info_panel(
     return panel
 
 
+def render_mini_graph(
+    result: SceneGraphResult,
+    width: int = MINI_GRAPH_WIDTH,
+    height: int = MINI_GRAPH_HEIGHT,
+) -> np.ndarray:
+    """Render a compact directed graph view in a separate window."""
+    panel = np.full((height, width, 3), 28, dtype=np.uint8)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(panel, "Mini Graph", (12, 24), font, 0.55, (120, 220, 255), 1, cv2.LINE_AA)
+
+    count = len(result.objects)
+    if count == 0:
+        cv2.putText(panel, "(no objects)", (12, height // 2), font, 0.5, (150, 150, 150), 1, cv2.LINE_AA)
+        return panel
+
+    center_x = width // 2
+    center_y = height // 2 + 12
+    radius = min(width, height) * 0.34
+    positions: dict[int, tuple[int, int]] = {}
+
+    for index, obj in enumerate(result.objects):
+        angle = (2.0 * np.pi * index / count) - (np.pi / 2.0)
+        positions[obj.index] = (
+            int(center_x + radius * np.cos(angle)),
+            int(center_y + radius * np.sin(angle)),
+        )
+
+    for rel in result.relations:
+        if rel.subject_index not in positions or rel.object_index not in positions:
+            continue
+        start = positions[rel.subject_index]
+        end = positions[rel.object_index]
+        cv2.arrowedLine(panel, start, end, (80, 140, 255), 2, tipLength=0.18, line_type=cv2.LINE_AA)
+
+        predicate = rel.predicate[:14]
+        mid_x = (start[0] + end[0]) // 2
+        mid_y = (start[1] + end[1]) // 2
+        (text_w, text_h), _ = cv2.getTextSize(predicate, font, 0.32, 1)
+        cv2.rectangle(
+            panel,
+            (mid_x - text_w // 2 - 2, mid_y - text_h - 2),
+            (mid_x + text_w // 2 + 2, mid_y + 2),
+            (20, 20, 20),
+            -1,
+        )
+        cv2.putText(
+            panel,
+            predicate,
+            (mid_x - text_w // 2, mid_y),
+            font,
+            0.32,
+            (210, 210, 210),
+            1,
+            cv2.LINE_AA,
+        )
+
+    node_radius = MINI_GRAPH_NODE_RADIUS
+    for obj in result.objects:
+        pos = positions[obj.index]
+        color = class_color(obj.class_id)
+        cv2.circle(panel, pos, node_radius, color, -1, lineType=cv2.LINE_AA)
+        cv2.circle(panel, pos, node_radius, (255, 255, 255), 1, lineType=cv2.LINE_AA)
+
+        label = obj.class_name[:12]
+        (text_w, _), _ = cv2.getTextSize(label, font, 0.35, 1)
+        cv2.putText(
+            panel,
+            label,
+            (pos[0] - text_w // 2, pos[1] + node_radius + 16),
+            font,
+            0.35,
+            (230, 230, 230),
+            1,
+            cv2.LINE_AA,
+        )
+
+    summary = f"{count} obj  {len(result.relations)} rel"
+    cv2.putText(panel, summary, (12, height - 12), font, 0.42, (160, 160, 160), 1, cv2.LINE_AA)
+    return panel
+
+
 def _draw_primary_relation(image: np.ndarray, result: SceneGraphResult) -> None:
     """Draw the first relation triplet centered at the bottom of the frame."""
     for rel in result.relations:
@@ -219,22 +319,27 @@ def _draw_hud(
     paused: bool,
     provider: str,
     show_graph: bool = True,
+    show_image: bool = True,
+    source_label: str = "camera",
 ) -> None:
     font = cv2.FONT_HERSHEY_SIMPLEX
     scale = max(0.45, (0.3 * image.shape[1]) / 500)
     lines = [
+        f"Source: {source_label}",
         f"Provider: {provider}",
         f"Inference: {result.inference_ms:.1f} ms",
         f"Objects: {len(result.objects)}  Relations: {len(result.relations)}",
     ]
     if fps is not None:
-        lines.insert(0, f"FPS: {fps:.1f}")
+        lines.insert(1, f"FPS: {fps:.1f}")
     if paused:
         lines.append("PAUSED")
+    if not show_image:
+        lines.append("IMAGE OFF")
     if not show_graph:
         lines.append("GRAPH OFF")
 
-    lines.extend(["q/ESC quit | s save | p pause | g graph | r rotate | 0 reset | c camera"])
+    lines.extend(["q/ESC quit | s save | p pause | g graph | h hud | i image | o video | r rotate | 0 reset | c camera"])
 
     for i, text in enumerate(lines):
         pos = (12, 24 + i * int(28 * scale))

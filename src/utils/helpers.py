@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from src.config import OUTPUT_DIR, SCREENSHOTS_DIR
 
@@ -37,6 +39,53 @@ def open_camera(index: int, width: int, height: int) -> cv2.VideoCapture:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     return cap
+
+
+def open_video(path: Path) -> cv2.VideoCapture:
+    """Open a video file for frame-by-frame reading."""
+    cap = cv2.VideoCapture(str(path))
+    return cap
+
+
+def pick_video_file() -> Path | None:
+    """Show a native file dialog and return the selected video path."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError:
+        logging.getLogger(__name__).error("tkinter is unavailable; cannot open file dialog.")
+        return None
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        root.attributes("-topmost", True)
+    except tk.TclError:
+        pass
+    if sys.platform == "win32":
+        root.update()
+
+    path = filedialog.askopenfilename(
+        parent=root,
+        title="Select video file",
+        filetypes=[
+            ("Video files", "*.mp4 *.avi *.mkv *.mov *.wmv *.webm *.m4v"),
+            ("All files", "*.*"),
+        ],
+    )
+    root.destroy()
+    return Path(path) if path else None
+
+
+def read_frame(cap: cv2.VideoCapture, *, loop_video: bool) -> tuple[bool, np.ndarray | None]:
+    """Read the next frame; optionally loop video files at EOF."""
+    ret, frame = cap.read()
+    if ret and frame is not None:
+        return True, frame
+    if not loop_video:
+        return False, None
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    return cap.read()
 
 
 def next_json_output_path(output_dir: Path = OUTPUT_DIR) -> Path:
