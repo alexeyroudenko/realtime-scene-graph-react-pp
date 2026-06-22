@@ -2,7 +2,7 @@
 
 You are an expert Python developer in real-time computer vision.
 
-Create a complete, clean, high-performance Python project called `realtime-scene-graph-opencv`.
+Create a complete, clean, high-performance Python project called `realtime-scene-graph-react-pp`.
 
 ## Goal
 

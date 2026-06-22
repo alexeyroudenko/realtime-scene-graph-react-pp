@@ -23,7 +23,7 @@ Lightweight desktop app for **real-time Scene Graph Generation** from a webcam u
 ## Install
 
 ```bash
-cd realtime-scene-graph-opencv
+cd realtime-scene-graph-react-pp
 python -m venv .venv
 
 # Windows
@@ -100,7 +100,7 @@ On first launch, the REACT++ model (~50 MB) is downloaded into `models/`.
 ## Project Layout
 
 ```
-realtime-scene-graph-opencv/
+realtime-scene-graph-react-pp/
 ├── src/
 │   ├── config.py
 │   ├── inference/

@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "realtime-scene-graph-opencv"
+name = "realtime-scene-graph-react-pp"
 version = "1.0.0"
 description = "Real-time scene graph generation from webcam using pure OpenCV and REACT++ ONNX"
 readme = "README.md"
